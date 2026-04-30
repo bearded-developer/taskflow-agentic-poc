@@ -1,0 +1,81 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  iteration-check:
+    runs-on: ubuntu-latest
+    outputs:
+      skip_review: ${{ steps.cap.outputs.skip_review }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install @octokit/rest
+      - id: cap
+        run: node .agent/iteration-cap.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HUMAN_FALLBACK_USER: ${{ vars.HUMAN_FALLBACK_USER }}
+
+  review:
+    needs: iteration-check
+    if: needs.iteration-check.outputs.skip_review != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude reviewer
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--model claude-opus-4-7"
+          prompt: |
+            You are reviewing PR #${{ github.event.pull_request.number }}
+            in ${{ github.repository }}.
+
+            Read the system prompt at `.agent/reviewer-prompt.md` and the
+            standards at `AGENTS.md`. Then read the linked planning issue
+            referenced in the PR description.
+
+            Use these tools to gather context:
+            - `gh pr view ${{ github.event.pull_request.number }} --json title,body,files`
+            - `gh pr diff ${{ github.event.pull_request.number }}`
+            - `gh issue view <number from PR body>` for the planning issue
+            - `gh pr checks ${{ github.event.pull_request.number }}` for CI status
+
+            Produce your review in the format specified in
+            `.agent/reviewer-prompt.md`. Post it as a PR review using
+            `gh pr review`. Include the marker
+            `<!-- ai-reviewer-marker -->` somewhere in the body.
+
+            If verdict is APPROVE, also post a Slack-friendly summary as a
+            separate PR comment that starts with `✅ READY FOR HUMAN MERGE`.
+
+  notify:
+    needs: review
+    if: always() && needs.review.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for approval and notify
+        run: |
+          echo "Review completed. Check PR for verdict."
+          # Slack/Teams webhook call would go here. For POC, the PR
+          # comment is sufficient — the demo focuses on the in-PR flow.
