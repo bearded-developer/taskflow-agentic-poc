@@ -1,5 +1,5 @@
 import React from 'react';
-import { Priority } from '@shared/types';
+import type { Priority } from '@shared/types';
 
 interface PriorityBadgeProps {
   priority: Priority;

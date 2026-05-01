@@ -1,5 +1,5 @@
 import React from 'react';
-import { Task } from '@shared/types';
+import type { Task } from '@shared/types';
 import { PriorityBadge } from './PriorityBadge';
 
 interface TaskListProps {
