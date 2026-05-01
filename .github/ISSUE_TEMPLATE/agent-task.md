@@ -6,7 +6,8 @@ labels: agent-task
 ---
 
 ## Linked Jira Ticket
-TASK-NNN: <link>
+- Jira key: TASK-NNN
+- Jira URL: <link>
 
 ## User Story
 As a <role>, I want <capability>, so that <benefit>.
@@ -24,9 +25,9 @@ As a <role>, I want <capability>, so that <benefit>.
 ---
 
 ## Development Plan
-<!-- Copilot fills this in. Do not delete. -->
-_Awaiting plan from agent._
+<!-- ai-plan-marker -->
+_Planner agent posts the plan as a comment. Keep this marker for automation._
 
 ## Plan Approval
-<!-- Reviewer comments here. Use "LGTM, proceed" to approve. -->
-_Awaiting human review._
+- Human approver replies in comments with exactly: LGTM, proceed
+- Any other feedback means "revise plan" and implementation must not start

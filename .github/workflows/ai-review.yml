@@ -5,10 +5,9 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   issues: write
-  id-token: write
 
 concurrency:
   group: ai-review-${{ github.event.pull_request.number }}
@@ -24,9 +23,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npm install @octokit/rest
+      - run: npm install --no-save @octokit/rest
       - id: cap
-        run: node .agent/iteration-cap.js
+        run: node .github/scripts/iteration-cap.js
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -42,32 +41,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Claude reviewer
-        uses: anthropics/claude-code-action@v1
+      - name: Ask Copilot to review PR
+        uses: actions/github-script@v7
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_args: "--model claude-opus-4-7"
-          prompt: |
-            You are reviewing PR #${{ github.event.pull_request.number }}
-            in ${{ github.repository }}.
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const body = [
+              "@copilot Please review this PR against the linked Jira story and approved plan.",
+              "",
+              "Requirements:",
+              "- Follow .agent/reviewer-prompt.md and AGENTS.md.",
+              "- Use findings-first format and include marker <!-- ai-reviewer-marker -->.",
+              "- Validate correctness, completeness, tests, and security expectations.",
+              "- If approved, post a separate comment that starts with: ✅ READY FOR HUMAN MERGE",
+            ].join("\n");
 
-            Read the system prompt at `.agent/reviewer-prompt.md` and the
-            standards at `AGENTS.md`. Then read the linked planning issue
-            referenced in the PR description.
-
-            Use these tools to gather context:
-            - `gh pr view ${{ github.event.pull_request.number }} --json title,body,files`
-            - `gh pr diff ${{ github.event.pull_request.number }}`
-            - `gh issue view <number from PR body>` for the planning issue
-            - `gh pr checks ${{ github.event.pull_request.number }}` for CI status
-
-            Produce your review in the format specified in
-            `.agent/reviewer-prompt.md`. Post it as a PR review using
-            `gh pr review`. Include the marker
-            `<!-- ai-reviewer-marker -->` somewhere in the body.
-
-            If verdict is APPROVE, also post a Slack-friendly summary as a
-            separate PR comment that starts with `✅ READY FOR HUMAN MERGE`.
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body,
+            });
 
   notify:
     needs: review
