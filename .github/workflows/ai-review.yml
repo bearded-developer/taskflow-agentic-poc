@@ -14,8 +14,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  iteration-check:
+  validate-base:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Enforce PR target branch
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const baseRef = pr?.base?.ref || "";
+            if (baseRef !== "develop") {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: [
+                  "Workflow policy violation: PR target branch must be `develop`.",
+                  `Current target: \`${baseRef}\``,
+                  "Please retarget this PR to `develop` and re-run checks.",
+                ].join("\n"),
+              });
+              core.setFailed("PR base branch must be 'develop'.");
+            }
+
+  iteration-check:
+    needs: validate-base
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     outputs:
       skip_review: ${{ steps.cap.outputs.skip_review }}
     steps:
@@ -36,6 +65,8 @@ jobs:
     if: needs.iteration-check.outputs.skip_review != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,9 +95,72 @@ jobs:
               body,
             });
 
-  notify:
+  verify-verdict:
     needs: review
-    if: always() && needs.review.result == 'success'
+    if: needs.review.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Ensure AI verdict marker exists
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const marker = "<!-- ai-reviewer-marker -->";
+            const deadline = Date.now() + 8 * 60 * 1000;
+
+            async function hasVerdictMarker() {
+              const [reviews, comments] = await Promise.all([
+                github.rest.pulls.listReviews({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  per_page: 100,
+                }),
+                github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  per_page: 100,
+                }),
+              ]);
+
+              const inReviews = reviews.data.some((review) =>
+                (review.body || "").includes(marker)
+              );
+              const inComments = comments.data.some((comment) =>
+                (comment.body || "").includes(marker)
+              );
+
+              return inReviews || inComments;
+            }
+
+            let found = await hasVerdictMarker();
+            while (!found && Date.now() < deadline) {
+              await new Promise((resolve) => setTimeout(resolve, 20000));
+              found = await hasVerdictMarker();
+            }
+
+            if (!found) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: [
+                  "AI review gate failed: no verdict comment/review with marker found.",
+                  "Expected marker: <!-- ai-reviewer-marker -->",
+                  "Please ensure reviewer output is posted before merge.",
+                ].join("\n"),
+              });
+              core.setFailed("No AI review verdict marker found before timeout.");
+            }
+
+  notify:
+    needs: verify-verdict
+    if: needs.verify-verdict.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Check for approval and notify

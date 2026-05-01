@@ -17,6 +17,8 @@ jobs:
       github.event.comment.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -92,6 +94,7 @@ jobs:
                 "@copilot Implementation approved.",
                 `Branch name: ${branchName}`,
                 "Please implement the approved plan and open a PR to develop.",
+                "Never target main; if base is main, retarget PR to develop before requesting review.",
                 "Follow .agent/developer-prompt.md, AGENTS.md, and .github/copilot-instructions.md.",
                 "Use the latest approved plan comment (contains <!-- ai-plan-marker -->).",
                 `PR target branch: develop. Include \`Closes #${issueNumber}\` in PR body.`,

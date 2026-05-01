@@ -17,6 +17,8 @@ Rules:
 - Do not block on style-only comments.
 - Do not invent requirements that are absent from Jira/plan.
 - Cite concrete evidence from changed files/check outputs.
+- Submit a formal PR review with verdict APPROVE or CHANGES_REQUESTED.
+- Include marker <!-- ai-reviewer-marker --> exactly once in the review body.
 
 Verdict options:
 - APPROVE
