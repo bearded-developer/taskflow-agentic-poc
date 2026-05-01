@@ -19,6 +19,7 @@ Execution checklist:
    - backend: npm ci, npm run lint, npm run typecheck, npm test
    - frontend: npm ci, npm run lint, npm run typecheck, npm test
 4. Open PR to develop with Jira key and Closes #<issue-number>.
+5. Never target main. If PR base is main, stop and retarget to develop.
 
 PR body must include:
 - Jira link
