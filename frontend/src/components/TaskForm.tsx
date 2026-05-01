@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Priority, PRIORITIES, CreateTaskInput } from '../types';
+import { Priority, PRIORITIES, CreateTaskInput } from '@shared/types';
 
 interface TaskFormProps {
   onSubmit: (input: CreateTaskInput) => Promise<void>;

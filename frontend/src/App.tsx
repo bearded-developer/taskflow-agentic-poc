@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Task, CreateTaskInput } from './types';
+import { Task, CreateTaskInput } from '@shared/types';
 import { fetchTasks, createTask, updateTask, deleteTask } from './api/tasks';
 import { TaskForm } from './components/TaskForm';
 import { TaskList } from './components/TaskList';

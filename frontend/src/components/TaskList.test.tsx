@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { TaskList } from './TaskList';
-import { Task } from '../types';
+import { Task } from '@shared/types';
 import { describe, it, expect } from 'vitest';
 
 const mockTasks: Task[] = [
