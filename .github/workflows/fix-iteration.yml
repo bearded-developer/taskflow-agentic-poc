@@ -1,0 +1,69 @@
+name: AI Fix Iteration
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  fix:
+    if: >-
+      github.event.review.state == 'changes_requested'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Ask Copilot to fix requested changes
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const reviewer = context.payload.review.user.login;
+            const reviewBody = context.payload.review.body || "(no review body)";
+
+            const body = [
+              "@copilot Please fix this PR based on CHANGES_REQUESTED feedback.",
+              "",
+              `Reviewer: ${reviewer}`,
+              "Feedback:",
+              "---",
+              reviewBody,
+              "---",
+              "",
+              "Rules:",
+              "- Follow .agent/developer-prompt.md and AGENTS.md.",
+              "- Apply only requested fixes, update tests, and push to this PR branch.",
+              "- Comment with a concise fix summary after pushing.",
+            ].join("\n");
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body,
+            });
+
+      - name: Trigger re-review note
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: "Fix iteration pushed. Requesting AI re-review."
+            });

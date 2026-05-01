@@ -1,0 +1,99 @@
+name: Issue Comment Orchestrator
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  gate:
+    if: >-
+      github.event.issue.pull_request == null &&
+      contains(github.event.issue.labels.*.name, 'agent-task') &&
+      github.event.comment.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Parse approval signal
+        id: signal
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = (context.payload.comment.body || "").trim();
+            const approved = /^LGTM, proceed$/i.test(body);
+            core.setOutput("approved", String(approved));
+
+      - name: Ask Copilot to revise plan
+        if: steps.signal.outputs.approved != 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumber = context.payload.issue.number;
+            const feedback = context.payload.comment.body || "";
+            const body = [
+              "@copilot Please revise the current Development Plan using this human feedback.",
+              "",
+              "Rules:",
+              "- Planning only. Do not implement code.",
+              "- Follow .agent/planner-prompt.md and AGENTS.md.",
+              "- Update plan details while keeping marker <!-- ai-plan-marker -->.",
+              "",
+              "Human feedback:",
+              "---",
+              feedback,
+              "---",
+            ].join("\n");
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body,
+            });
+
+      - name: Implement approved plan with Copilot
+        if: steps.signal.outputs.approved == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumber = context.payload.issue.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const title = context.payload.issue.title || `task-${issueNumber}`;
+            const slug = title
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '')
+              .slice(0, 40) || `issue-${issueNumber}`;
+            const branchName = `task-${issueNumber}-${slug}`;
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body: [
+                "@copilot Implementation approved.",
+                `Branch name: ${branchName}`,
+                "Please implement the approved plan and open a PR to develop.",
+                "Follow .agent/developer-prompt.md, AGENTS.md, and .github/copilot-instructions.md.",
+                "Use the latest approved plan comment (contains <!-- ai-plan-marker -->).",
+                `PR target branch: develop. Include \`Closes #${issueNumber}\` in PR body.`,
+              ].join("\n")
+            });
